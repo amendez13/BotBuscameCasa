@@ -1,0 +1,15 @@
+{
+    "ChromeDriverLocation": "C:/Users/myuser/path/to/chromedriver_win32/",
+    "Version": "0.1",
+    "Targets": [
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/apostol-santiago/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/pinar-del-rey/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/canillas/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/conde-orgaz-piovera/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/palomas/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/sanchinarro/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/valdebebas-valdefuentes/",
+		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/virgen-del-cortijo-manoteras/",
+		"https://www.idealista.com/venta-viviendas/madrid/ciudad-lineal/costillares/"
+	]
+}
