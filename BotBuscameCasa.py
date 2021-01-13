@@ -16,8 +16,6 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
-
-
 class ConfigData:
     WEB_DRIVER_FILE_LOCATION = ''
     NEXT_PAGE_DELAY = 0
@@ -25,6 +23,8 @@ class ConfigData:
     listUrls = []
     Version = ""
     recipients = []
+    emailFrom = ""
+    sec = ""
     
     def __init__(self):
         self.GetConfigData()
@@ -39,6 +39,8 @@ class ConfigData:
             self.NEXT_PAGE_DELAY = int( data["NEXT_PAGE_DELAY"] )
             self.NEXT_ZONE_DELAY = int( data["NEXT_ZONE_DELAY"] )
             self.recipients = data['Recipients']
+            self.emailFrom = data['Sender']
+            self.sec = data['Secret']
         else:   #default
             self.NEXT_PAGE_DELAY = 20
             self.NEXT_ZONE_DELAY = 120
@@ -46,6 +48,8 @@ class ConfigData:
             self.listUrls = ["https://www.idealista.com/venta-viviendas/madrid/hortaleza/apostol-santiago/",
                         "https://www.idealista.com/venta-viviendas/madrid/hortaleza/pinar-del-rey/"]
             self.recipients = []
+            sef.emailFrom = "example3@example.com"
+            self.sec = "xxx"
 
 class DbPage:
     idList = []
@@ -336,11 +340,16 @@ def printAndLog(string):
     logging.info(string)
     
 def setUpLogs():
-    logging.basicConfig(filename='RealEstateInfo.log', level=logging.INFO, format='%(levelname)s-%(asctime)s: %(message)s', encoding='utf-8')
+    if not os.path.exists('RealEstateInfo.log'):
+        open('RealEstateInfo.log', 'w').close() 
+    if not os.path.exists('RealEstateDebug.log'):
+        open('RealEstateDebug.log', 'w').close() 
+    logging.basicConfig(filename='RealEstateInfo.log', level=logging.INFO, format='%(levelname)s-%(asctime)s: %(message)s')
     logging.basicConfig(encoding='utf-8')
-    logging.basicConfig(filename='RealEstateDebug.log', encoding='utf-8', level=logging.DEBUG, format='%(levelname)s-%(asctime)s: %(message)s')
+    logging.basicConfig(filename='RealEstateDebug.log', level=logging.DEBUG, format='%(levelname)s-%(asctime)s: %(message)s')
     logging.basicConfig(encoding='utf-8')
     logging.info('Opening new log session')
+    logging.debug('Opening new Debug log session')
     
 def loadDb(name):
     #load pandas db
@@ -392,16 +401,17 @@ def writeResults(Dfcont):
     Dfcont.df_Inactive.to_csv( todaysDirNameLocation + '/' + 'dbInactive_Pisos.csv', encoding='cp1252',index=False)
     Dfcont.df_InactConf.to_csv( todaysDirNameLocation + '/' + 'dbInactiveConf_Pisos.csv', encoding='cp1252',index=False)
 
-
+    os.replace("RealEstateInfo.log", todaysDirNameLocation + '/RealEstateInfo.log')  #Send log to proper dir
+    
     #Write out df to overwrite standard input file
     Dfcont.df_Db_out.to_csv('dbPisos.csv', encoding='cp1252',index=False)
     
-def sendEmail(df_new, FromStr, RecipList):
+def sendEmail(df_new, config):
     msg = MIMEMultipart()
     msg['Subject'] = "Nuevos pisos de Idealista"
-    msg['From'] = FromStr
+    msg['From'] = config.emailFrom
     recp= ""
-    for elem in RecipList:
+    for elem in config.recipients:
         recp = recp + elem + ", "
     recp = recp[:-2]
     msg['To'] = recp
@@ -419,34 +429,31 @@ def sendEmail(df_new, FromStr, RecipList):
     msg.attach(part1)
 
     port = 465  # For SSL
-    password = input("Type your password and press enter: ")
     context = ssl.create_default_context()
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
-        server.login(FromStr, password)
-        server.sendmail(msg['From'], RecipList, msg.as_string())
+        server.login(config.emailFrom, config.sec)
+        server.sendmail(msg['From'], config.recipients, msg.as_string())
 
 logging.basicConfig(filename='RealEstateInfo.log', level=logging.INFO, format='%(levelname)s-%(asctime)s: %(message)s')
 logging.basicConfig(encoding='utf-8')
 
 def main():
     mainUrl = "https://www.idealista.com"
-    emailFrom = 'botbuscamecasa@gmail.com'
     config = ConfigData()
-    displayLoadedUrls(config)
-    logging.info("Hellp")
     setUpLogs()
+    displayLoadedUrls(config)
     Dfcont = DfDbContainer()
     Dfcont.df_Db_in = loadDb('dbPisos.csv')
     Dfcont.df_today = executeBot(config,mainUrl)
     Dfcont.df_Db_out = BuildOutputDb(Dfcont.df_Db_in, Dfcont.df_today)
-    Dfcont.df_Db_out.to_csv('dbPisos2.csv', encoding='cp1252',index=False)  #Write pandas df to temp db
+    Dfcont.df_Db_out.to_csv('dbPisosTemp.csv', encoding='cp1252',index=False)  #Write pandas df to temp db
     #Get new and inactive entries
     Dfcont.df_new = FindNewDf(Dfcont.df_Db_in, Dfcont.df_today).reset_index(drop=True)
     Dfcont.df_Inactive = FindInactiveDf(Dfcont.df_Db_in, Dfcont.df_today).reset_index(drop=True)
     Dfcont.df_InactConf = getInactConf(Dfcont.df_Inactive, config)
     MarkInactiveDf(Dfcont.df_InactConf, Dfcont.df_Db_out)
     writeResults(Dfcont)
-    sendEmail(Dfcont.df_new, emailFrom, config.recipients)
+    sendEmail(Dfcont.df_new, config)
 
 
 if __name__ == "__main__":
