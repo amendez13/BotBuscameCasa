@@ -1,0 +1,8 @@
+*.csv
+*.log
+#ignore config.json file in current dir.
+/config.json
+# ignore all files in any dir called "misc"
+misc/
+.ipynb_checkpoints/
+history/
