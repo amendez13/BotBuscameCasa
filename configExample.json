@@ -13,9 +13,11 @@
 		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/valdebebas-valdefuentes/",
 		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/virgen-del-cortijo-manoteras/",
 		"https://www.idealista.com/venta-viviendas/madrid/ciudad-lineal/costillares/"
-	]
+	],
 	"Recipients": [
 		"example1@example.com",
 		"example2@example.com"	
-	]
+	],
+	"Sender": "example3@example.com",
+	"Secret": "xxxxxxxxxxxxxxxxx"
 }
