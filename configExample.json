@@ -19,5 +19,7 @@
 		"example2@example.com"	
 	],
 	"Sender": "example3@example.com",
-	"Secret": "xxxxxxxxxxxxxxxxx"
+	"Secret": "xxxxxxxxxxxxxxxxx",
+	"BkpLocWindows": "C:/Users/myuser/path/to/backupfile/dbPisos.csv",
+	"BkpLocLinux": "/myuser/path/to/backupfile/dbPisos.csv"
 }
