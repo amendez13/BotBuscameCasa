@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[ ]:
+
+
 from selenium import webdriver
 from bs4 import BeautifulSoup
 import pandas as pd
@@ -6,6 +12,7 @@ import time
 import logging
 import json
 import os
+import shutil
 import smtplib, ssl
 import email
 from email.message import Message
@@ -16,15 +23,21 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 
+# In[ ]:
+
+
 class ConfigData:
     WEB_DRIVER_FILE_LOCATION = ''
     NEXT_PAGE_DELAY = 0
     NEXT_ZONE_DELAY = 0
+    MAX_SINGLE_VISITS = 0
     listUrls = []
     Version = ""
     recipients = []
     emailFrom = ""
     sec = ""
+    BkpLocWindows = "",
+    BkpLocLinux = ""
     
     def __init__(self):
         self.GetConfigData()
@@ -38,18 +51,24 @@ class ConfigData:
             self.listUrls = data['Targets']
             self.NEXT_PAGE_DELAY = int( data["NEXT_PAGE_DELAY"] )
             self.NEXT_ZONE_DELAY = int( data["NEXT_ZONE_DELAY"] )
+            self.MAX_SINGLE_VISITS = int( data["MAX_SINGLE_VISITS"] )
             self.recipients = data['Recipients']
             self.emailFrom = data['Sender']
             self.sec = data['Secret']
+            self.BkpLocWindows = data['BkpLocWindows'],
+            self.BkpLocLinux = data['BkpLocLinux']
         else:   #default
             self.NEXT_PAGE_DELAY = 20
             self.NEXT_ZONE_DELAY = 120
+            self.MAX_SINGLE_VISITS = 75
             self.WEB_DRIVER_FILE_LOCATION = 'C:/Users/myuser/path/to/chromedriver.exe'
             self.listUrls = ["https://www.idealista.com/venta-viviendas/madrid/hortaleza/apostol-santiago/",
                         "https://www.idealista.com/venta-viviendas/madrid/hortaleza/pinar-del-rey/"]
             self.recipients = []
             sef.emailFrom = "example3@example.com"
             self.sec = "xxx"
+            self.BkpLocWindows = "",
+            self.BkpLocLinux = ""
 
 class DbPage:
     idList = []
@@ -237,7 +256,10 @@ def OpenBrowserAndFetchData(url, config):
     options = webdriver.ChromeOptions()
     options.page_load_strategy = 'eager'
     options.add_argument("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36")
-    driver = webdriver.Chrome(r"{}".format(config.WEB_DRIVER_FILE_LOCATION), options=options)
+    if os.name == "nt":
+        driver = webdriver.Chrome(r"{}".format(config.WEB_DRIVER_FILE_LOCATION), options=options)
+    elif os.name == "posix":
+        driver = webdriver.Chrome(options=options) #for linux: chromedriver as env variable
     driver.get(url)
     content = driver.page_source
     driver.quit()
@@ -316,19 +338,27 @@ def MarkInactiveDf(df_InactConf, df_Db_out):
         
 def getInactConf(df_Inactive, config):
     list = []
-    printAndLog("Evaluating Inactive List: ")
+    printAndLog("Evaluating Inactive List ("+str(len(df_Inactive.Url))+"):")
     for i, elem in enumerate(df_Inactive.Url):
+        if i >= config.MAX_SINGLE_VISITS:
+            printAndLog("Already visited number of times (MAX_SINGLE_VISITS): "+str(config.MAX_SINGLE_VISITS)+", leaving getInactConf")
+            return df_Inactive.iloc[ list ].reset_index(drop=True)
         printAndLog(elem)
-        soup = OpenBrowserAndFetchData(elem, config)
+        try:
+            soup = OpenBrowserAndFetchData(elem, config)
+        except:
+            time.sleep(60)
+            printAndLog("Exception caught: Failed OpenBrowserAndFetchData")
+            continue
         try:
             inactiveString = soup.select("div.deactivated-detail_container > h1")[0].get_text().strip()
             if inactiveString == 'Lo sentimos, este anuncio ya no está publicado':
                 list.append(i)
-                printAndLog("True Positive")
+                printAndLog("True Positive: " + str(i))
         except IndexError as error:
-            printAndLog("False Positive")
+            printAndLog("False Positive: " + str(i))
         printAndLog("--------")
-        time.sleep(15)
+        time.sleep(45)
 
     return df_Inactive.iloc[ list ].reset_index(drop=True)
 
@@ -386,10 +416,7 @@ def writeResults(Dfcont):
     if not os.path.exists('history'):
         os.makedirs('history')
 
-    date =  datetime.now()
-
-    todaysDirName = str(date.year) + date.strftime("%b") +  date.strftime('%d')
-    todaysDirNameLocation = 'history'+ '/' + todaysDirName
+    todaysDirNameLocation = getTodaysDirNameLocation()
 
     if not os.path.exists( todaysDirNameLocation ):
         os.makedirs( todaysDirNameLocation )
@@ -400,13 +427,12 @@ def writeResults(Dfcont):
     Dfcont.df_new.to_csv( todaysDirNameLocation + '/' + 'dbNew_Pisos.csv', encoding='cp1252',index=False)
     Dfcont.df_Inactive.to_csv( todaysDirNameLocation + '/' + 'dbInactive_Pisos.csv', encoding='cp1252',index=False)
     Dfcont.df_InactConf.to_csv( todaysDirNameLocation + '/' + 'dbInactiveConf_Pisos.csv', encoding='cp1252',index=False)
-
-    os.replace("RealEstateInfo.log", todaysDirNameLocation + '/RealEstateInfo.log')  #Send log to proper dir
     
     #Write out df to overwrite standard input file
     Dfcont.df_Db_out.to_csv('dbPisos.csv', encoding='cp1252',index=False)
     
 def sendEmail(df_new, config):
+    printAndLog("sending email...")
     msg = MIMEMultipart()
     msg['Subject'] = "Nuevos pisos de Idealista"
     msg['From'] = config.emailFrom
@@ -416,8 +442,7 @@ def sendEmail(df_new, config):
     recp = recp[:-2]
     msg['To'] = recp
 
-    html = """\
-    <html>
+    html = """    <html>
       <head></head>
       <body>
         {0}
@@ -433,16 +458,35 @@ def sendEmail(df_new, config):
     with smtplib.SMTP_SSL("smtp.gmail.com", port, context=context) as server:
         server.login(config.emailFrom, config.sec)
         server.sendmail(msg['From'], config.recipients, msg.as_string())
+        printAndLog("Email sent")
 
-logging.basicConfig(filename='RealEstateInfo.log', level=logging.INFO, format='%(levelname)s-%(asctime)s: %(message)s')
-logging.basicConfig(encoding='utf-8')
+def getTodaysDirNameLocation():
+    date =  datetime.now()
 
-def main():
+    todaysDirName = str(date.year) + date.strftime("%b") +  date.strftime('%d')
+    todaysDirNameLocation = 'history'+ '/' + todaysDirName
+    return todaysDirNameLocation
+
+
+def ShutdownLogs():
+    logging.shutdown()
+    os.replace("RealEstateInfo.log", getTodaysDirNameLocation() + '/RealEstateInfo.log')  #Send log to proper dir
+
+def updateDbPisosBackup(config):
+    if os.name == "nt":
+        shutil.copyfile('dbPisos.csv', config.BkpLocWindows[0])
+    elif os.name == "posix":
+        shutil.copyfile('dbPisos.csv', config.BkpLocLinux)
+
+
+# In[ ]:
+
+
+def main(Dfcont):
     mainUrl = "https://www.idealista.com"
     config = ConfigData()
     setUpLogs()
     displayLoadedUrls(config)
-    Dfcont = DfDbContainer()
     Dfcont.df_Db_in = loadDb('dbPisos.csv')
     Dfcont.df_today = executeBot(config,mainUrl)
     Dfcont.df_Db_out = BuildOutputDb(Dfcont.df_Db_in, Dfcont.df_today)
@@ -454,7 +498,16 @@ def main():
     MarkInactiveDf(Dfcont.df_InactConf, Dfcont.df_Db_out)
     writeResults(Dfcont)
     sendEmail(Dfcont.df_new, config)
+    printAndLog("Job Successful!")
+    ShutdownLogs()
+    updateDbPisosBackup(config) #backup dbPisos.csv
+
+Dfcont = DfDbContainer()
+main(Dfcont)
 
 
-if __name__ == "__main__":
-    main()
+# In[ ]:
+
+
+
+

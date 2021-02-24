@@ -3,6 +3,7 @@
     "Version": "0.1",
 	"NEXT_PAGE_DELAY": "20",
 	"NEXT_ZONE_DELAY": "120",
+	"MAX_SINGLE_VISITS": "25",
     "Targets": [
 		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/apostol-santiago/",
 		"https://www.idealista.com/venta-viviendas/madrid/hortaleza/pinar-del-rey/",
